@@ -7,7 +7,9 @@ from skillNer.skill_extractor_class import SkillExtractor
 from utils import clean_text
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sentence_transformers import SentenceTransformer, util
+from PyPDF2 import PdfReader
 from collections import Counter
+import requests
 # load default skills data base
 # import skill extractor
 nlp = spacy.load("en_core_web_md")
@@ -115,31 +117,51 @@ def main():
     job_description = st.text_area("Enter the job description", "")
 
     job_description = clean_text(job_description)
-    # Resume Text Input
-    resume_text = st.text_area("Enter your resume text", "")
+
+    # Resume PDF Upload
+    resume_pdf = st.file_uploader("Upload your resume PDF", type="pdf")
 
     # Submit Button
     if st.button("Submit"):
-        missing_soft_skills, matching_soft_skills, matching_hard_skills, missing_hard_skills = extract_skills(job_description, resume_text)
-        
-        job_gn_keywords = extract_keywords(job_description)
-        resume_gn_keywords = extract_keywords(resume_text)
-        common_keywords = list(set(job_gn_keywords) & set(resume_gn_keywords))
-        missing_keywords = list(set(job_gn_keywords) - set(resume_gn_keywords))[:15]
+        if resume_pdf is not None:
+            # Read the uploaded PDF file
+            reader = PdfReader(resume_pdf)
+            # page = reader.pages[0]
+            all_text= ""
+            for page in reader.pages:
+                page_text = page.extract_text()
+                all_text += page_text
+            all_text = clean_text(all_text)
+            response = requests.post(
+                st.secrets["scraper_url"],
+                headers={"Content-Type": "application/json"},
+                json={"resume":all_text}
+            )
+            res_skills = ' '.join(response.json()['res']['skill'])
+            res_roles = ' '.join([i['role'] for i in response.json()['res']["experience"]])
+            resume_j_det = ' '.join([i['details'] for i in response.json()['res']["experience"]])
+            resume_text = f"{res_skills} {res_roles} {resume_j_det}"
 
-        missing_keywords_freq = count_keyword_frequencies(missing_keywords, job_description)
-        common_keywords_freq = count_keyword_frequencies(common_keywords, job_description)
+            missing_soft_skills, matching_soft_skills, matching_hard_skills, missing_hard_skills = extract_skills(job_description, resume_text)
+            
+            job_gn_keywords = extract_keywords(job_description)
+            resume_gn_keywords = extract_keywords(resume_text)
+            common_keywords = list(set(job_gn_keywords) & set(resume_gn_keywords))
+            missing_keywords = list(set(job_gn_keywords) - set(resume_gn_keywords))[:15]
 
-        similarity_score = cosin_similarity_score(job_description, resume_text)
-        similarity_score = f"{similarity_score:.2f}"
-        # Display the results
-        st.write("Score:", similarity_score)
-        
-        st.write("Common Keywords:", common_keywords_freq)
-        st.write("Missing Keywords:", missing_keywords_freq)
-        st.write("Missing Soft Skills:", missing_soft_skills)
-        st.write("Matching Soft Skills:", matching_soft_skills)
-        st.write("Matching Hard Skills:", matching_hard_skills)
-        st.write("Missing Hard Skills:", missing_hard_skills)
+            missing_keywords_freq = count_keyword_frequencies(missing_keywords, job_description)
+            common_keywords_freq = count_keyword_frequencies(common_keywords, job_description)
+
+            similarity_score = cosin_similarity_score(job_description, resume_text)
+            similarity_score = f"{similarity_score:.2f}"
+            # Display the results
+            st.write("Score:", similarity_score)
+            
+            st.write("Common Keywords:", common_keywords_freq)
+            st.write("Missing Keywords:", missing_keywords_freq)
+            st.write("Missing Soft Skills:", missing_soft_skills)
+            st.write("Matching Soft Skills:", matching_soft_skills)
+            st.write("Matching Hard Skills:", matching_hard_skills)
+            st.write("Missing Hard Skills:", missing_hard_skills)
 if __name__ == '__main__':
     main()
