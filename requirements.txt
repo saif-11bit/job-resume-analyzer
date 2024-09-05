@@ -106,3 +106,4 @@ wcwidth==0.2.13
 weasel==0.4.1
 wrapt==1.16.0
 zipp==3.20.1
+PyPDF2
